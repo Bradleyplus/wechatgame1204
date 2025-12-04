@@ -10,6 +10,18 @@
   <div class="wrap">
     <canvas id="game" width="800" height="480"></canvas>
     <div class="hint">方向键左右移动，空格跳跃，Z 键射击</div>
+
+    <!-- Login / Start overlay -->
+    <div id="overlay" class="overlay">
+      <div class="overlay-box">
+        <h2>请输入昵称开始游戏</h2>
+        <input id="playerName" type="text" placeholder="你的昵称" maxlength="20" />
+        <div class="overlay-actions">
+          <button id="startBtn">开始</button>
+        </div>
+        <div class="small">提示：方向键左右移动，空格跳跃，Z 射击</div>
+      </div>
+    </div>
   </div>
   <script src="game.js"></script>
 </body>

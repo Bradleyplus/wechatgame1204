@@ -3,3 +3,15 @@ body{background:#111;color:#fff;font-family:Arial,Helvetica,sans-serif;display:f
 .wrap{position:relative}
 canvas{background:#4a6b8a;border:4px solid #222;display:block}
 .hint{position:absolute;left:8px;bottom:-30px;color:#ddd;font-size:14px}
+
+/* Overlay (login/start) */
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45)}
+.overlay-box{background:#fff;color:#111;padding:20px;border-radius:8px;min-width:320px;box-shadow:0 8px 30px rgba(0,0,0,0.4);text-align:center}
+.overlay-box h2{margin:0 0 12px;font-size:20px}
+.overlay-box input{width:100%;padding:8px 10px;font-size:16px;margin-bottom:12px;border:1px solid #ccc;border-radius:4px}
+.overlay-actions{display:flex;justify-content:center}
+.overlay-actions button{background:#2b8cff;color:#fff;border:none;padding:8px 18px;border-radius:4px;cursor:pointer}
+.overlay .small{margin-top:8px;color:#666;font-size:13px}
+
+/* HUD */
+.hud{position:absolute;right:12px;top:10px;color:#fff;font-size:16px}
