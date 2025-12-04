@@ -1,15 +1,19 @@
 ﻿import streamlit as st
 import streamlit.components.v1 as components
+from pathlib import Path
 
 st.set_page_config(page_title='魂斗罗 简化版 (Web)', layout='wide')
-st.title('魂斗罗  简化版 (Embedded Web Game)')
+st.title('魂斗罗 — 简化版 (Embedded Web Game)')
 
-# 直接读取本地的 web-game/index.html 并嵌入
-with open('../web-game/index.html', 'r', encoding='utf-8') as f:
-    html = f.read()
+# 使用当前文件位置计算仓库根目录，稳健读取 web-game/index.html
+base_dir = Path(__file__).resolve().parent.parent
+html_path = base_dir / 'web-game' / 'index.html'
 
-# components.html 会把 HTML 嵌入到 Streamlit 页面
-components.html(html, height=560)
+if not html_path.exists():
+    st.error(f"找不到 web 游戏文件：{html_path}\n请确认 `web-game/index.html` 已存在并已提交到仓库。")
+else:
+    html = html_path.read_text(encoding='utf-8')
+    components.html(html, height=560, scrolling=True)
 
 st.markdown('''
 - 控制：方向键左右移动，空格跳跃，Z 射击
