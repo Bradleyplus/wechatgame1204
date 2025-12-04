@@ -34,19 +34,78 @@
   const enemies = [];
   let spawnTimer = 0;
   let score = 0;
+  let currentLevelIndex = 0;
+
+  // 关卡配置（逐渐提高难度）
+  const levels = [
+    { name: '简单', spawnInterval: 110, enemySpeed: -1.5, targetScore: 500 },
+    { name: '普通', spawnInterval: 90, enemySpeed: -2.2, targetScore: 1500 },
+    { name: '困难', spawnInterval: 70, enemySpeed: -3.0, targetScore: 3500 }
+  ];
+
+  function currentLevel(){ return levels[currentLevelIndex] }
 
   // overlay handling
   const overlay = document.getElementById('overlay');
   const startBtn = document.getElementById('startBtn');
   const nameInput = document.getElementById('playerName');
+  const difficultySelect = document.getElementById('difficulty');
+  const muteBtn = document.getElementById('muteBtn');
+  let isMuted = false;
+  const preloaderEl = document.getElementById('preloader');
+  const preloaderFill = document.getElementById('preloader-fill');
+  const preloaderText = document.getElementById('preloader-text');
+
+  // 简单的 WebAudio 音效管理（无需外部文件）
+  const SoundManager = {
+    ctx: null,
+    init(){ if(this.ctx) return; try{ this.ctx = new (window.AudioContext||window.webkitAudioContext)() }catch(e){ this.ctx=null } },
+    playBeep(freq, time=0.05, type='sine'){ if(!this.ctx || isMuted) return; const o=this.ctx.createOscillator(); const g=this.ctx.createGain(); o.type=type; o.frequency.value=freq; o.connect(g); g.connect(this.ctx.destination); g.gain.value=0.06; o.start(); o.stop(this.ctx.currentTime + time); },
+    playShoot(){ this.playBeep(900,0.06,'square') },
+    playHit(){ this.playBeep(200,0.12,'sawtooth') },
+    playExplode(){ this.playBeep(80,0.3,'sawtooth') },
+    resume(){ if(this.ctx && this.ctx.state==='suspended') this.ctx.resume(); }
+  };
   startBtn.addEventListener('click', ()=>{
     const name = nameInput.value.trim();
     state.playerName = name || 'player';
+    // 应用难度
+    const d = difficultySelect ? difficultySelect.value : 'normal';
+    if(d === 'easy') currentLevelIndex = 0;
+    else if(d === 'normal') currentLevelIndex = 1;
+    else if(d === 'hard') currentLevelIndex = 2;
     state.mode = 'playing';
     overlay.style.display = 'none';
+    // 启动资源预加载，再进入游戏
+    SoundManager.init(); SoundManager.resume();
+    // 显示预载器
+    if(preloaderEl){ preloaderEl.style.display = 'block'; preloaderFill.style.width = '0%'; preloaderText.textContent = '加载中 0%'; }
+    ResourceLoader.loadAll().then(()=>{
+      if(preloaderEl) preloaderEl.style.display = 'none';
+      state.mode = 'playing'; overlay.style.display = 'none'; SoundManager.playShoot();
+    }).catch(err=>{
+      console.error('资源加载失败',err); if(preloaderText) preloaderText.textContent = '资源加载失败，继续开始'; state.mode = 'playing'; overlay.style.display = 'none';
+    });
   });
+  
+  // 资源加载器：图片（SVG/PNG）与音频占位实现
+  const ResourceLoader = {
+    images: {},
+    list: [
+      {key:'player', src:'assets/player.svg'},
+      {key:'enemy', src:'assets/enemy.svg'}
+    ],
+    loadImage(item){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res({key:item.key,img}); img.onerror=rej; img.src=item.src; }) },
+    loadAll(){
+      const tasks = this.list.map(i=>this.loadImage(i).then(r=>{ this.images[r.key]=r.img; const done = Object.keys(this.images).length; const total = this.list.length; const pct = Math.floor(done/total*100); if(preloaderFill) preloaderFill.style.width = pct + '%'; if(preloaderText) preloaderText.textContent = '加载中 ' + pct + '%'; }));
+      return Promise.all(tasks);
+    }
+  };
 
-  function spawnEnemy(){ enemies.push(new Enemy(W+30, H-60)) }
+  // 静音按钮
+  if(muteBtn){ muteBtn.addEventListener('click', ()=>{ isMuted = !isMuted; muteBtn.textContent = isMuted ? '🔇' : '🔊'; }) }
+
+  function spawnEnemy(){ const lvl = currentLevel(); const e = new Enemy(W+30, H-60); e.vx = lvl.enemySpeed; enemies.push(e) }
 
   function rectIntersect(a,b){ return a.x < b.x + b.w && a.x + (a.w||0) > b.x && a.y < b.y + b.h && a.y + (a.h||0) > b.y }
 
@@ -58,7 +117,7 @@
     player.update(keys);
 
     // shooting
-    if(keys['KeyZ'] && player.canShoot<=0){ bullets.push(new Bullet(player.x + (player.dir>0?player.w:-6), player.y+12, player.dir*8)); player.canShoot=12 }
+    if(keys['KeyZ'] && player.canShoot<=0){ bullets.push(new Bullet(player.x + (player.dir>0?player.w:-6), player.y+12, player.dir*8)); player.canShoot=12; SoundManager.playShoot(); }
 
     // bullets
     for(let i=bullets.length-1;i>=0;i--){ bullets[i].update(); if(bullets[i].x < -20 || bullets[i].x > W+20) bullets.splice(i,1) }
@@ -67,28 +126,33 @@
     for(let i=enemies.length-1;i>=0;i--){ enemies[i].update(); if(enemies[i].x + enemies[i].w < -50) enemies.splice(i,1) }
 
     // bullet vs enemy
-    for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; for(let j=enemies.length-1;j>=0;j--){ const e=enemies[j]; if(rectIntersect(b,e)){ bullets.splice(i,1); e.health--; if(e.health<=0){ enemies.splice(j,1); score += 100 } break } } }
+    for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; for(let j=enemies.length-1;j>=0;j--){ const e=enemies[j]; if(rectIntersect(b,e)){ bullets.splice(i,1); e.health--; SoundManager.playHit(); if(e.health<=0){ enemies.splice(j,1); score += 100; SoundManager.playExplode() } break } } }
 
     // player vs enemy
-    for(let j=enemies.length-1;j>=0;j--){ const e=enemies[j]; if(rectIntersect(player,e)){ player.health--; enemies.splice(j,1); if(player.health<=0){ state.mode='gameover'; setTimeout(resetGame, 800); } } }
+    for(let j=enemies.length-1;j>=0;j--){ const e=enemies[j]; if(rectIntersect(player,e)){ player.health--; enemies.splice(j,1); SoundManager.playHit(); if(player.health<=0){ state.mode='gameover'; setTimeout(resetGame, 800); } } }
 
-    spawnTimer++; if(spawnTimer>90){ spawnTimer=0; spawnEnemy() }
+    // 根据关卡调整生成节奏
+    spawnTimer++; if(spawnTimer > currentLevel().spawnInterval){ spawnTimer=0; spawnEnemy() }
+
+    // 关卡升级检测
+    if(currentLevelIndex < levels.length-1 && score >= currentLevel().targetScore){ currentLevelIndex++; }
   }
 
   function draw(){
     ctx.clearRect(0,0,W,H);
     // ground
     ctx.fillStyle='#2b2b2b'; ctx.fillRect(0,H-20,W,20);
-    // player
-    player.draw(ctx);
+    // player (image if loaded)
+    if(ResourceLoader.images.player){ const img=ResourceLoader.images.player; ctx.drawImage(img, player.x, player.y, player.w, player.h); } else player.draw(ctx);
     // bullets
     bullets.forEach(b=>b.draw(ctx));
     // enemies
-    enemies.forEach(e=>e.draw(ctx));
+    enemies.forEach(e=>{ if(ResourceLoader.images.enemy){ const img=ResourceLoader.images.enemy; ctx.drawImage(img, e.x, e.y, e.w, e.h); } else e.draw(ctx); });
     // HUD
     ctx.fillStyle='#fff'; ctx.font='18px Arial'; ctx.fillText('生命: '+player.health,10,24); ctx.fillText('得分: '+score,140,24);
-    // player name
+    // player name & level
     ctx.fillStyle='#fff'; ctx.font='14px Arial'; ctx.fillText(state.playerName, 10, 48);
+    ctx.fillText('关卡: ' + currentLevel().name, 10, 68);
   }
 
   function loop(){ update(); draw(); requestAnimationFrame(loop); }

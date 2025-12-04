@@ -11,11 +11,29 @@
     <canvas id="game" width="800" height="480"></canvas>
     <div class="hint">方向键左右移动，空格跳跃，Z 键射击</div>
 
+    <div class="top-controls">
+      <button id="muteBtn">🔊</button>
+    </div>
+
     <!-- Login / Start overlay -->
     <div id="overlay" class="overlay">
       <div class="overlay-box">
         <h2>请输入昵称开始游戏</h2>
         <input id="playerName" type="text" placeholder="你的昵称" maxlength="20" />
+        <div style="margin:8px 0; text-align:left">
+          <label for="difficulty">选择难度：</label>
+          <select id="difficulty">
+            <option value="easy">简单</option>
+            <option value="normal" selected>普通</option>
+            <option value="hard">困难</option>
+          </select>
+        </div>
+
+        <!-- Preloader / progress -->
+        <div id="preloader" class="preloader" style="display:none;margin-bottom:8px">
+          <div class="preloader-bar"><div id="preloader-fill" class="preloader-fill" style="width:0%"></div></div>
+          <div id="preloader-text" style="font-size:12px;color:#666;margin-top:6px">加载中 0%</div>
+        </div>
         <div class="overlay-actions">
           <button id="startBtn">开始</button>
         </div>
