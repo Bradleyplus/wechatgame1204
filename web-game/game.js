@@ -82,6 +82,8 @@
     if(preloaderEl){ preloaderEl.style.display = 'block'; preloaderFill.style.width = '0%'; preloaderText.textContent = '加载中 0%'; }
     ResourceLoader.loadAll().then(()=>{
       if(preloaderEl) preloaderEl.style.display = 'none';
+      // 构建动画
+      buildAnimations();
       state.mode = 'playing'; overlay.style.display = 'none'; SoundManager.playShoot();
     }).catch(err=>{
       console.error('资源加载失败',err); if(preloaderText) preloaderText.textContent = '资源加载失败，继续开始'; state.mode = 'playing'; overlay.style.display = 'none';
@@ -93,7 +95,12 @@
     images: {},
     list: [
       {key:'player', src:'assets/player.svg'},
-      {key:'enemy', src:'assets/enemy.svg'}
+      {key:'player_walk1', src:'assets/player_walk1.svg'},
+      {key:'player_walk2', src:'assets/player_walk2.svg'},
+      {key:'player_walk3', src:'assets/player_walk3.svg'},
+      {key:'enemy', src:'assets/enemy.svg'},
+      {key:'enemy_fly1', src:'assets/enemy_fly1.svg'},
+      {key:'enemy_fly2', src:'assets/enemy_fly2.svg'}
     ],
     loadImage(item){ return new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>res({key:item.key,img}); img.onerror=rej; img.src=item.src; }) },
     loadAll(){
@@ -101,6 +108,27 @@
       return Promise.all(tasks);
     }
   };
+
+  // 简单动画类：接受若干帧 Image，循环播放
+  class Animation{
+    constructor(frames, frameRate=8){ this.frames = frames || []; this.frameRate = frameRate; this.index = 0; this.acc = 0 }
+    update(dt){ this.acc += dt; const interval = 1/this.frameRate; if(this.acc >= interval){ const steps = Math.floor(this.acc/interval); this.index = (this.index + steps) % Math.max(1,this.frames.length); this.acc -= steps*interval } }
+    current(){ return this.frames.length ? this.frames[this.index] : null }
+  }
+
+  // 当资源加载完成后，构建动画实例
+  function buildAnimations(){
+    const imgs = ResourceLoader.images;
+    // player animations
+    const pWalk = [imgs.player_walk1, imgs.player_walk2, imgs.player_walk3].filter(Boolean);
+    player.anim = {
+      idle: new Animation([imgs.player].filter(Boolean), 1),
+      walk: new Animation(pWalk, 10)
+    };
+    // enemy animations (fly)
+    const eFly = [imgs.enemy_fly1, imgs.enemy_fly2].filter(Boolean);
+    Enemy.prototype.getSprite = function(){ if(eFly.length && Math.abs(this.vx) > 1.9) return eFly[Math.floor((Date.now()/150)%eFly.length)]; return imgs.enemy || null }
+  }
 
   // 静音按钮
   if(muteBtn){ muteBtn.addEventListener('click', ()=>{ isMuted = !isMuted; muteBtn.textContent = isMuted ? '🔇' : '🔊'; }) }
@@ -142,12 +170,18 @@
     ctx.clearRect(0,0,W,H);
     // ground
     ctx.fillStyle='#2b2b2b'; ctx.fillRect(0,H-20,W,20);
-    // player (image if loaded)
-    if(ResourceLoader.images.player){ const img=ResourceLoader.images.player; ctx.drawImage(img, player.x, player.y, player.w, player.h); } else player.draw(ctx);
+    // player (animation if available)
+    if(player.anim && player.anim.walk.frames.length){
+      // choose walk vs idle based on vx
+      const anim = Math.abs(player.vx) > 0.5 ? player.anim.walk : player.anim.idle;
+      // update with approximate delta (1/60)
+      anim.update(1/60);
+      const img = anim.current(); if(img) ctx.drawImage(img, player.x, player.y, player.w, player.h); else player.draw(ctx);
+    } else if(ResourceLoader.images.player){ const img=ResourceLoader.images.player; ctx.drawImage(img, player.x, player.y, player.w, player.h); } else player.draw(ctx);
     // bullets
     bullets.forEach(b=>b.draw(ctx));
     // enemies
-    enemies.forEach(e=>{ if(ResourceLoader.images.enemy){ const img=ResourceLoader.images.enemy; ctx.drawImage(img, e.x, e.y, e.w, e.h); } else e.draw(ctx); });
+    enemies.forEach(e=>{ const sp = (typeof e.getSprite==='function')? e.getSprite() : ResourceLoader.images.enemy; if(sp) ctx.drawImage(sp, e.x, e.y, e.w, e.h); else e.draw(ctx); });
     // HUD
     ctx.fillStyle='#fff'; ctx.font='18px Arial'; ctx.fillText('生命: '+player.health,10,24); ctx.fillText('得分: '+score,140,24);
     // player name & level
