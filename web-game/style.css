@@ -17,6 +17,22 @@ canvas{background:#4a6b8a;border:4px solid #222;display:block}
 .top-controls{position:absolute;right:12px;top:8px}
 .top-controls button{background:rgba(0,0,0,0.4);border:0;color:#fff;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:16px}
 
+/* Mobile controls */
+#mobile-controls{position:absolute;left:12px;bottom:12px;right:12px;pointer-events:none}
+.joystick{position:absolute;left:6px;bottom:6px;width:120px;height:120px;pointer-events:auto}
+.joystick-base{position:absolute;inset:0;border-radius:50%;background:rgba(0,0,0,0.25);}
+.joystick-knob{position:absolute;width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,0.18);left:34px;top:34px;transform:translate(0,0)}
+.actions{position:absolute;right:6px;bottom:6px;display:flex;flex-direction:column;gap:8px;pointer-events:auto}
+.action-btn{width:72px;height:72px;border-radius:50%;background:rgba(0,0,0,0.35);color:#fff;border:0;font-size:18px}
+
+/* HUD */
+.hud-right{position:absolute;right:12px;top:12px;color:#fff;font-size:16px;text-align:right}
+.hud-right .score{font-size:20px;font-weight:bold}
+.life-badge{display:inline-block;background:rgba(255,0,0,0.1);padding:4px 8px;border-radius:6px;margin-left:6px}
+
+/* Floating score text */
+.floating{position:absolute;pointer-events:none}
+
 /* Preloader */
 .preloader{width:100%}
 .preloader-bar{width:100%;height:10px;background:#eee;border-radius:6px;overflow:hidden}
