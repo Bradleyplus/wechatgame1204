@@ -12,7 +12,9 @@
       this.stateTimer = 0;
       this.anim = null;
     }
-    setState(s){ if(this.state === s) return; this.state = s; this.stateTimer = 0 }
+    setState(s){ if(this.state === s) return; this.state = s; this.stateTimer = 0; // reset animation for new state
+      try{ if(this.anim && this.anim[s]) this.anim[s].reset(); }catch(e){}
+    }
     update(keys, dt){
       // dt in seconds
       const speed = 3; // base per-frame style scaled by dt*60
@@ -140,24 +142,36 @@
     }
   };
 
-  // 简单动画类：接受若干帧 Image，循环播放
+  // 强化的动画类：支持 loop、一次性播放(onFinished) 与 reset
   class Animation{
-    constructor(frames, frameRate=8){ this.frames = frames || []; this.frameRate = frameRate; this.index = 0; this.acc = 0 }
-    update(dt){ this.acc += dt; const interval = 1/this.frameRate; if(this.acc >= interval){ const steps = Math.floor(this.acc/interval); this.index = (this.index + steps) % Math.max(1,this.frames.length); this.acc -= steps*interval } }
-    current(){ return this.frames.length ? this.frames[this.index] : null }
+    constructor(frames, frameRate=8, options={loop:true,onFinished:null}){
+      this.frames = frames || [];
+      this.frameRate = frameRate;
+      this.index = 0; this.acc = 0;
+      this.loop = options.loop !== undefined ? options.loop : true;
+      this.onFinished = options.onFinished || null;
+      this.finished = false;
+    }
+    update(dt){ if(this.finished) return; this.acc += dt; const interval = 1/this.frameRate; if(this.acc >= interval){ const steps = Math.floor(this.acc/interval); this.index += steps; this.acc -= steps*interval; if(this.index >= this.frames.length){ if(this.loop){ this.index = this.index % Math.max(1,this.frames.length); } else { this.index = this.frames.length - 1; this.finished = true; if(this.onFinished) try{ this.onFinished() }catch(e){ console.error(e) } } } } }
+    current(){ return this.frames.length ? this.frames[Math.max(0,Math.min(this.index, this.frames.length-1))] : null }
+    reset(){ this.index = 0; this.acc = 0; this.finished = false }
   }
 
   // 当资源加载完成后，构建动画实例
   function buildAnimations(){
     const imgs = ResourceLoader.images;
-    // player animations
-    const pWalk = [imgs.player_walk1, imgs.player_walk2, imgs.player_walk3].filter(Boolean);
+    // player animations (更多帧与非循环支持)
+    const pWalk = [imgs.player_walk1, imgs.player_walk2, imgs.player_walk3, imgs.player_walk4, imgs.player_walk5].filter(Boolean);
+    const pJump = [imgs.player_jump, imgs.player_jump2].filter(Boolean);
+    const pShoot = [imgs.player_shoot, imgs.player_shoot2].filter(Boolean);
+    const pDeath = [imgs.player_death, imgs.player_death2, imgs.player_death3].filter(Boolean);
     player.anim = {
-      idle: new Animation([imgs.player].filter(Boolean), 1),
-      walk: new Animation(pWalk, 10),
-      jump: new Animation([imgs.player_jump].filter(Boolean), 1),
-      shoot: new Animation([imgs.player_shoot].filter(Boolean), 8),
-      death: new Animation([imgs.player_death].filter(Boolean), 4)
+      idle: new Animation([imgs.player].filter(Boolean), 1, {loop:true}),
+      walk: new Animation(pWalk, 12, {loop:true}),
+      jump: new Animation(pJump, 6, {loop:false}),
+      shoot: new Animation(pShoot, 18, {loop:false, onFinished: ()=>{ if(player.state==='shoot'){ // 回到合适状态
+        if(player.onGround && Math.abs(player.vx)>0.5) player.setState('run'); else player.setState('idle'); } }}),
+      death: new Animation(pDeath, 6, {loop:false, onFinished: ()=>{ player.setState('dead'); setTimeout(()=>{ resetGame() }, 800); } })
     };
     // enemy animations (fly)
     const eFly = [imgs.enemy_fly1, imgs.enemy_fly2].filter(Boolean);
