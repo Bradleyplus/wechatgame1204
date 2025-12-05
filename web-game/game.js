@@ -5,16 +5,47 @@
 
   // 简化实体类与游戏管理
   class Player{
-    constructor(x,y){ this.x=x; this.y=y; this.w=28; this.h=40; this.vx=0; this.vy=0; this.onGround=false; this.dir=1; this.canShoot=0; this.health=3 }
-    update(keys){
-      if(keys['ArrowLeft']){ this.vx = -3; this.dir = -1; }
-      else if(keys['ArrowRight']){ this.vx = 3; this.dir = 1; }
+    constructor(x,y){
+      this.x=x; this.y=y; this.w=28; this.h=40; this.vx=0; this.vy=0; this.onGround=false; this.dir=1;
+      this.shootCooldown=0; this.health=3;
+      this.state = 'idle'; // idle, run, jump, shoot, dead
+      this.stateTimer = 0;
+      this.anim = null;
+    }
+    setState(s){ if(this.state === s) return; this.state = s; this.stateTimer = 0 }
+    update(keys, dt){
+      // dt in seconds
+      const speed = 3; // base per-frame style scaled by dt*60
+      const scale = dt * 60;
+      if(this.state === 'dead') return;
+
+      // horizontal input
+      if(keys['ArrowLeft']){ this.vx = -speed; this.dir = -1; }
+      else if(keys['ArrowRight']){ this.vx = speed; this.dir = 1; }
       else this.vx = 0;
-      if(keys['Space'] || keys['KeyW']){ if(this.onGround){ this.vy = -12; this.onGround=false } }
-      this.vy += 0.9; this.x += this.vx; this.y += this.vy;
-      if(this.y + this.h >= H - 20){ this.y = H - 20 - this.h; this.vy = 0; this.onGround = true }
+
+      // jump
+      if((keys['Space'] || keys['KeyW']) && this.onGround){ this.vy = -12; this.onGround = false; this.setState('jump') }
+
+      // physics (keep legacy feel by scaling)
+      this.vy += 0.9 * scale;
+      this.x += this.vx * scale;
+      this.y += this.vy * scale;
+
+      // ground
+      if(this.y + this.h >= H - 20){ this.y = H - 20 - this.h; this.vy = 0; if(!this.onGround){ this.onGround = true; if(this.state === 'jump') this.setState('idle') } }
+
       if(this.x < 0) this.x = 0; if(this.x + this.w > W) this.x = W - this.w;
-      if(this.canShoot>0) this.canShoot--;
+
+      // shoot cooldown
+      if(this.shootCooldown > 0) this.shootCooldown -= dt; if(this.shootCooldown < 0) this.shootCooldown = 0;
+
+      // state transitions for run/idle
+      if(this.onGround && this.state !== 'shoot' && this.state !== 'jump'){
+        if(Math.abs(this.vx) > 0.5) this.setState('run'); else this.setState('idle');
+      }
+
+      this.stateTimer += dt;
     }
     draw(ctx){ ctx.fillStyle='#ffeb3b'; ctx.fillRect(this.x,this.y,this.w,this.h) }
   }
@@ -123,7 +154,10 @@
     const pWalk = [imgs.player_walk1, imgs.player_walk2, imgs.player_walk3].filter(Boolean);
     player.anim = {
       idle: new Animation([imgs.player].filter(Boolean), 1),
-      walk: new Animation(pWalk, 10)
+      walk: new Animation(pWalk, 10),
+      jump: new Animation([imgs.player_jump].filter(Boolean), 1),
+      shoot: new Animation([imgs.player_shoot].filter(Boolean), 8),
+      death: new Animation([imgs.player_death].filter(Boolean), 4)
     };
     // enemy animations (fly)
     const eFly = [imgs.enemy_fly1, imgs.enemy_fly2].filter(Boolean);
@@ -139,13 +173,15 @@
 
   function resetGame(){ player.x=80; player.y=H-80; player.health=3; enemies.length=0; bullets.length=0; score=0; state.mode='login'; overlay.style.display='flex' }
 
-  function update(){
+  function update(dt){
     if(state.mode !== 'playing') return;
     // player update
-    player.update(keys);
+    player.update(keys, dt);
 
     // shooting
-    if(keys['KeyZ'] && player.canShoot<=0){ bullets.push(new Bullet(player.x + (player.dir>0?player.w:-6), player.y+12, player.dir*8)); player.canShoot=12; SoundManager.playShoot(); }
+    if(keys['KeyZ'] && player.shootCooldown<=0 && player.state !== 'dead'){
+      bullets.push(new Bullet(player.x + (player.dir>0?player.w:-6), player.y+12, player.dir*8)); player.shootCooldown = 0.18; player.setState('shoot'); player.stateTimer = 0; SoundManager.playShoot();
+    }
 
     // bullets
     for(let i=bullets.length-1;i>=0;i--){ bullets[i].update(); if(bullets[i].x < -20 || bullets[i].x > W+20) bullets.splice(i,1) }
@@ -166,17 +202,19 @@
     if(currentLevelIndex < levels.length-1 && score >= currentLevel().targetScore){ currentLevelIndex++; }
   }
 
-  function draw(){
+  function draw(dt){
     ctx.clearRect(0,0,W,H);
     // ground
     ctx.fillStyle='#2b2b2b'; ctx.fillRect(0,H-20,W,20);
     // player (animation if available)
-    if(player.anim && player.anim.walk.frames.length){
-      // choose walk vs idle based on vx
-      const anim = Math.abs(player.vx) > 0.5 ? player.anim.walk : player.anim.idle;
-      // update with approximate delta (1/60)
-      anim.update(1/60);
-      const img = anim.current(); if(img) ctx.drawImage(img, player.x, player.y, player.w, player.h); else player.draw(ctx);
+    if(player.anim){
+      // choose animation by state
+      let anim = player.anim.idle;
+      if(player.state === 'run') anim = player.anim.walk;
+      else if(player.state === 'jump') anim = player.anim.jump || player.anim.idle;
+      else if(player.state === 'shoot') anim = player.anim.shoot || player.anim.idle;
+      else if(player.state === 'dead') anim = player.anim.death || player.anim.idle;
+      if(anim){ anim.update(dt); const img = anim.current(); if(img) ctx.drawImage(img, player.x, player.y, player.w, player.h); else player.draw(ctx); } else player.draw(ctx);
     } else if(ResourceLoader.images.player){ const img=ResourceLoader.images.player; ctx.drawImage(img, player.x, player.y, player.w, player.h); } else player.draw(ctx);
     // bullets
     bullets.forEach(b=>b.draw(ctx));
@@ -189,7 +227,11 @@
     ctx.fillText('关卡: ' + currentLevel().name, 10, 68);
   }
 
-  function loop(){ update(); draw(); requestAnimationFrame(loop); }
-  loop();
+  // main loop with delta time
+  let lastTime = null;
+  function loop(ts){
+    if(!lastTime) lastTime = ts; const dt = Math.min(0.05, (ts - lastTime)/1000); lastTime = ts; update(dt); draw(dt); requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
 
 })();
