@@ -20,15 +20,37 @@ else:
     css_path = web_dir / 'style.css'
     if css_path.exists():
         css_text = css_path.read_text(encoding='utf-8')
-        # replace <link ... href="style.css">（简单替换）
         html = html.replace('<link rel="stylesheet" href="style.css">', f"<style>{css_text}</style>")
 
     # inline JS
     js_path = web_dir / 'game.js'
     if js_path.exists():
         js_text = js_path.read_text(encoding='utf-8')
-        # replace external script tag
         html = html.replace('<script src="game.js"></script>', f"<script>{js_text}</script>")
+
+    # Inline SVG assets as data URLs so Streamlit can serve them inside the component
+    assets_dir = web_dir / 'assets'
+    if assets_dir.exists():
+        import urllib.parse, base64
+        for p in assets_dir.glob('**/*'):
+            if p.is_file() and p.suffix.lower() in ['.svg', '.png', '.jpg', '.jpeg', '.gif']:
+                try:
+                    data = p.read_bytes()
+                    if p.suffix.lower() == '.svg':
+                        # URL-encode the SVG text for data URI (utf8)
+                        svg_text = data.decode('utf-8')
+                        svg_escaped = urllib.parse.quote(svg_text, safe='')
+                        data_url = f"data:image/svg+xml;utf8,{svg_escaped}"
+                    else:
+                        b64 = base64.b64encode(data).decode('ascii')
+                        mime = 'image/png' if p.suffix.lower()=='.png' else ('image/jpeg' if p.suffix.lower() in ['.jpg','.jpeg'] else 'image/gif')
+                        data_url = f"data:{mime};base64,{b64}"
+                    # replace references like assets/xxx.svg or ./assets/xxx.svg
+                    rel = str(p.relative_to(web_dir)).replace('\\','/')
+                    html = html.replace(rel, data_url)
+                    html = html.replace('./' + rel, data_url)
+                except Exception as e:
+                    print('asset inline error', p, e)
 
     components.html(html, height=640, scrolling=True)
 
